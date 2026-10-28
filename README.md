@@ -43,6 +43,17 @@ Para verlo localmente basta con abrir `index.html` en el navegador.
 2. En **Settings → Pages**, elige *Deploy from a branch*, rama `main`, carpeta `/ (root)`.
 3. En uno o dos minutos queda disponible en `https://<usuario>.github.io/example-rnn/`.
 
-## Créditos
+## Fuentes
 
-Material de divulgación · Dra. Nancy P.C. · Instituto de Investigaciones en Inteligencia Artificial, Universidad Veracruzana.
+El ejemplo está basado en:
+
+- Video: <https://www.youtube.com/watch?v=x6E44DDWg5Q>
+- Jurafsky, D. y Martin, J. H. *Speech and Language Processing* (3.ª ed., borrador). Capítulo 14: «RNNs and LSTMs». <https://web.stanford.edu/~jurafsky/slp3/14.pdf>
+
+## Declaratoria de uso de IA generativa
+
+Este material se desarrolló con apoyo de inteligencia artificial generativa (Claude Opus 5.5, de Anthropic), bajo la supervisión de la Dra. Nancy P.C., Instituto de Investigaciones en Inteligencia Artificial, Universidad Veracruzana.
+
+La herramienta se usó para generar el código del widget, el mini dataset de ejemplo y los textos explicativos. La autora definió los objetivos didácticos, la frase de ejemplo, las clases, los requisitos de interactividad y las fuentes de referencia; además revisó, ajustó y validó el contenido final. La responsabilidad sobre el material es de la autora.
+
+Octubre de 2026.
