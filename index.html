@@ -1,0 +1,837 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>RNN del agua de jamaica</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="description" content="Widget didáctico e interactivo: una red neuronal recurrente (RNN) que se entrena en el navegador para clasificar frases en positivo, negativo o neutral, paso a paso.">
+<meta name="author" content="Dra. Nancy P.C.">
+<meta property="og:title" content="RNN del agua de jamaica">
+<meta property="og:description" content="Cómo lee una red neuronal recurrente: tokenización, embeddings, recurrencia, BPTT y clasificación, paso a paso.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='%23a3123f'/%3E%3Cpath d='M9 16h4m6 0h4M13 16a3 3 0 1 0 6 0a3 3 0 1 0-6 0' stroke='white' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Source+Sans+3:wght@400;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: una sola columna de lectura (≈1040px) con seis pasos numerados en secuencia real; cada paso combina explicación y un panel interactivo. */
+:root{
+  --bg:#f6f4f5; --surface:#ffffff; --sunk:#efebed; --ink:#221a1f; --muted:#6a5d64; --line:#e3d9de;
+  --accent:#a3123f; --accent-soft:#f7e4eb; --teal:#11707f; --cell0:#f0ecee; --on-strong:#ffffff;
+  --mark:#ffe27a; --mark-ink:#3a2c00;
+  --pos:#2e7d4c; --neg:#b4471f; --neu:#5a6a7b;
+  --display:"Bricolage Grotesque", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+  --body:"Source Sans 3", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#151116; --surface:#1e181f; --sunk:#252027; --ink:#efe7eb; --muted:#ab9ca4; --line:#372e36;
+  --accent:#e04a7c; --accent-soft:#3a1a27; --teal:#3fb3c4; --cell0:#2a232b; --on-strong:#ffffff;
+  --mark:#6d5810; --mark-ink:#fff3c4;
+  --pos:#5cc285; --neg:#ec8257; --neu:#9aabbd; color-scheme:dark } }
+:root[data-theme="dark"]{
+  --bg:#151116; --surface:#1e181f; --sunk:#252027; --ink:#efe7eb; --muted:#ab9ca4; --line:#372e36;
+  --accent:#e04a7c; --accent-soft:#3a1a27; --teal:#3fb3c4; --cell0:#2a232b; --on-strong:#ffffff;
+  --mark:#6d5810; --mark-ink:#fff3c4;
+  --pos:#5cc285; --neg:#ec8257; --neu:#9aabbd; color-scheme:dark }
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px));padding-block:0 48px}
+.wrap{max-width:1040px;margin:0 auto}
+h1,h2,h3{font-family:var(--display);text-wrap:balance;line-height:1.1;margin:0}
+p{margin:0}
+.prose{max-width:66ch;display:grid;gap:.7em;color:var(--ink)}
+.muted{color:var(--muted)}
+.mono{font-family:var(--mono);font-variant-numeric:tabular-nums}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* Hero */
+.hero{padding-block:40px 28px;display:grid;gap:18px}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent)}
+.hero h1{font-size:clamp(34px,6vw,58px);font-weight:800;letter-spacing:-.02em}
+.hero .lead{font-size:18px;max-width:62ch;color:var(--muted)}
+.hero-phrase{display:flex;flex-wrap:wrap;gap:6px 6px;align-items:center;font-family:var(--display);font-size:clamp(18px,2.6vw,24px);font-weight:500}
+.hero-phrase span{padding:2px 9px;border-radius:6px;background:var(--surface);border:1px solid var(--line)}
+.hero-phrase i{font-style:normal;color:var(--accent);font-family:var(--mono);font-size:14px}
+.stepnav{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px}
+.stepnav a{color:var(--muted);text-decoration:none}
+.stepnav a b{font-family:var(--mono);color:var(--accent);margin-right:4px}
+.stepnav a:hover{color:var(--ink)}
+
+/* Secciones */
+section.step{border-top:1px solid var(--line);padding-block:36px;display:grid;gap:20px}
+.step-head{display:grid;grid-template-columns:auto 1fr;gap:4px 18px;align-items:baseline}
+.num{font-family:var(--display);font-weight:800;font-size:48px;color:var(--accent);line-height:1;grid-row:span 2}
+.step-head h2{font-size:clamp(24px,3.4vw,32px);font-weight:700}
+.step-head .sub{color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:grid;gap:14px;min-width:0}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.cols > *{min-width:0}
+.label{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.scroll-x{overflow-x:auto;padding-bottom:4px}
+
+/* Marcas: hiperparámetro (lo ajustas tú) y parámetro aprendido */
+.hp{background:var(--mark);color:var(--mark-ink);padding:0 .3em;border-radius:3px;font-weight:600;box-decoration-break:clone;-webkit-box-decoration-break:clone}
+.lp{font-family:var(--mono);font-size:.92em;color:var(--teal);font-weight:600;border-bottom:1.5px dotted var(--teal)}
+.legend{display:flex;flex-wrap:wrap;gap:10px 22px;font-size:14px;align-items:center}
+
+/* Botones */
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 13px;cursor:pointer;font-weight:600;font-size:15px}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-strong)}
+.btn.primary:hover{filter:brightness(1.08)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn.sm{padding:4px 9px;font-size:13px}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+input[type=text],textarea,select{background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:8px 10px;width:100%}
+textarea{resize:vertical;min-height:44px}
+
+/* Clases */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap;border:1px solid currentColor}
+.badge::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.c0{color:var(--pos)} .c1{color:var(--neg)} .c2{color:var(--neu)}
+.bg0{background:var(--pos)} .bg1{background:var(--neg)} .bg2{background:var(--neu)}
+
+/* Dataset */
+.counts{display:flex;flex-wrap:wrap;gap:8px}
+.ds-list{display:grid;gap:0;max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:8px}
+.ds-item{display:grid;grid-template-columns:92px 1fr auto auto;gap:10px;align-items:center;padding:7px 10px;border-bottom:1px solid var(--line);font-size:15px}
+.ds-item:last-child{border-bottom:0}
+.ds-item .txt{min-width:0;overflow-wrap:anywhere}
+.ds-item .pred{font-family:var(--mono);font-size:12px;white-space:nowrap}
+.ok{color:var(--pos)} .bad{color:var(--neg)}
+.new-tag{font-family:var(--mono);font-size:10px;color:var(--accent);margin-left:6px}
+.xbtn{border:0;background:none;color:var(--muted);cursor:pointer;font-size:17px;line-height:1;padding:2px 6px;border-radius:4px}
+.xbtn:hover{color:var(--neg);background:var(--sunk)}
+.form-grid{display:grid;grid-template-columns:1fr 150px auto;gap:8px;align-items:center}
+.msg{font-size:14px;min-height:1.3em}
+
+/* Tokens */
+.tokens{display:flex;flex-wrap:wrap;gap:8px}
+.tok{display:grid;justify-items:center;gap:2px;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;min-width:56px}
+.tok .w{font-weight:700}
+.tok .id{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tok.unk{border-style:dashed;border-color:var(--accent)}
+.tok.unk .id{color:var(--accent)}
+.pipeline{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-family:var(--mono);font-size:13px}
+.pipeline span{background:var(--sunk);padding:3px 8px;border-radius:5px}
+.pipeline em{font-style:normal;color:var(--muted)}
+
+/* Celdas de calor */
+.heat{display:grid;gap:2px;width:max-content}
+.cell{display:flex;align-items:center;justify-content:center;width:42px;height:21px;border-radius:3px;font-family:var(--mono);font-size:10px;font-variant-numeric:tabular-nums;color:var(--ink)}
+.cell.sm{width:30px;height:16px;font-size:0}
+.scale{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--muted);font-family:var(--mono)}
+.scale .bar{width:140px;height:10px;border-radius:3px;background:linear-gradient(90deg,var(--teal),var(--cell0),var(--accent))}
+
+/* Arquitectura */
+.eqs{display:grid;gap:10px;font-size:17px}
+.eq{display:grid;grid-template-columns:28px 1fr;gap:8px;align-items:baseline}
+.eq .n{font-family:var(--mono);font-size:12px;color:var(--muted)}
+.eq .f{font-family:var(--mono);font-size:15px;overflow-wrap:anywhere}
+.eq .why{grid-column:2;font-size:14px;color:var(--muted)}
+table{border-collapse:collapse;width:100%;font-size:14px}
+th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:600}
+td.r{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+tfoot td{font-weight:700;border-bottom:0}
+
+.hparams{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.hpc{border:1px solid var(--line);border-radius:8px;padding:12px;display:grid;gap:6px;background:var(--bg);border-left:4px solid var(--mark)}
+.hpc .top{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.hpc .name{font-weight:700}
+.hpc .val{font-family:var(--mono);font-weight:600;background:var(--mark);color:var(--mark-ink);padding:0 6px;border-radius:3px}
+.hpc p{font-size:13.5px;color:var(--muted)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:8px;overflow:hidden;width:max-content;max-width:100%}
+.seg button{border:0;background:var(--surface);padding:6px 10px;cursor:pointer;font-size:14px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--mark);color:var(--mark-ink)}
+input[type=range]:disabled{opacity:.4}
+.ohbox{width:70px;border:1px dashed var(--muted);border-radius:6px;padding:6px 4px;font-family:var(--mono);font-size:10.5px;text-align:center;line-height:1.4;color:var(--muted)}
+.ohbox b{color:var(--accent);font-size:13px}
+.cmp td.win{font-weight:700;color:var(--pos)}
+.swatch{display:inline-block;width:12px;height:3px;border-radius:2px;margin-right:6px;vertical-align:middle}
+
+/* Entrenamiento */
+.stale{border:1px solid var(--accent);background:var(--accent-soft);border-radius:8px;padding:10px 12px;font-size:15px;display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.charts{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.chart svg{width:100%;height:auto;display:block}
+.kpis{display:flex;flex-wrap:wrap;gap:22px}
+.kpi .v{font-family:var(--display);font-size:26px;font-weight:700;font-variant-numeric:tabular-nums}
+.kpi .k{font-size:13px;color:var(--muted)}
+
+/* Recorrido */
+.timeline{display:flex;gap:0;align-items:stretch;width:max-content;padding:4px 2px}
+.tstep{display:grid;gap:6px;justify-items:center;padding:8px 8px;border:1px solid var(--line);border-radius:8px;background:var(--bg);cursor:pointer;min-width:74px}
+.tstep:hover{border-color:var(--muted)}
+.tstep.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft);background:var(--surface)}
+.tstep.future{opacity:.45}
+.tstep .w{font-weight:700;font-size:15px}
+.tstep .t{font-family:var(--mono);font-size:10px;color:var(--muted)}
+.arrow{align-self:center;font-family:var(--mono);color:var(--muted);font-size:11px;padding:0 3px;text-align:center;line-height:1.1}
+.mini{display:flex;width:58px;height:8px;border-radius:2px;overflow:hidden;background:var(--sunk)}
+.mini span{display:block;height:100%}
+.ctrl{display:grid;grid-template-columns:auto auto auto 1fr;gap:8px;align-items:center}
+.narr{font-size:16px;background:var(--bg);border-radius:8px;padding:10px 12px;border:1px solid var(--line)}
+.calc{display:flex;gap:8px;align-items:flex-start;width:max-content}
+.calc .col{display:grid;gap:4px;justify-items:center}
+.calc .col .h{font-family:var(--mono);font-size:11px;text-align:center;line-height:1.2;min-height:40px;display:flex;align-items:flex-end;justify-content:center}
+.calc .op{align-self:center;font-family:var(--mono);font-size:18px;color:var(--muted);padding-top:40px}
+.hmat{display:grid;gap:2px;width:max-content;align-items:center}
+.hmat .rl{font-family:var(--mono);font-size:10px;color:var(--muted);padding-right:4px;text-align:right}
+.hmat .cl{font-size:11px;font-weight:600;text-align:center;writing-mode:vertical-rl;transform:rotate(180deg);height:62px;max-width:30px;overflow:hidden;cursor:pointer;color:var(--muted)}
+.hmat .cl.on{color:var(--accent)}
+.hmat .cell.sm{cursor:pointer}
+.hmat .cell.sm.on{outline:2px solid var(--accent);outline-offset:-1px}
+
+/* Salida */
+.probs{display:grid;gap:10px}
+.prob{display:grid;grid-template-columns:90px 1fr 64px;gap:10px;align-items:center}
+.prob .track{height:22px;background:var(--sunk);border-radius:4px;overflow:hidden}
+.prob .fill{height:100%;border-radius:4px;transition:width .35s ease}
+.prob .pct{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums}
+.verdict{font-family:var(--display);font-size:26px;font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 11px;font-size:14px;cursor:pointer}
+.chip:hover{border-color:var(--accent);color:var(--accent)}
+.note{font-size:14.5px;color:var(--muted);border-left:3px solid var(--line);padding-left:12px}
+footer{border-top:1px solid var(--line);padding-top:20px;font-size:13px;color:var(--muted)}
+
+@media (max-width:620px){
+  .form-grid{grid-template-columns:1fr 1fr}
+  .form-grid textarea{grid-column:1/-1}
+  .ds-item{grid-template-columns:1fr auto auto;}
+  .ds-item .badge{grid-column:1/-1;justify-self:start}
+  .num{font-size:36px}
+  .ctrl{grid-template-columns:auto auto auto;}
+  .ctrl input{grid-column:1/-1}
+}
+@media (prefers-reduced-motion: reduce){ .prob .fill{transition:none} }
+</style>
+<style>
+html{color-scheme:light}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="eyebrow">Redes neuronales recurrentes · clasificación de sentimiento</div>
+    <h1>¿Cómo lee una red recurrente?</h1>
+    <p class="lead">Una RNN lee una frase palabra por palabra y guarda una memoria que se actualiza en cada paso. Al final, usa esa memoria para decidir si la frase es positiva, negativa o neutral. Aquí la entrenas en tu navegador con un mini dataset que tú puedes ampliar.</p>
+    <div class="hero-phrase" id="heroPhrase" aria-label="Frase de ejemplo"></div>
+    <div class="legend">
+      <span><span class="hp">resaltado amarillo</span> = hiperparámetro: <b>lo ajustas tú</b></span>
+      <span><span class="lp">W_hh</span> = parámetro: <b>lo aprende la red</b></span>
+    </div>
+    <nav class="stepnav" aria-label="Pasos">
+      <a href="#datos"><b>1</b>Datos</a><a href="#tokens"><b>2</b>Palabras → números</a><a href="#arq"><b>3</b>Arquitectura</a><a href="#entrena"><b>4</b>Entrenamiento</a><a href="#lectura"><b>5</b>Lectura paso a paso</a><a href="#salida"><b>6</b>Clasificación</a>
+    </nav>
+  </header>
+
+  <!-- 1 DATOS -->
+  <section class="step" id="datos">
+    <div class="step-head"><div class="num">1</div><h2>El mini dataset etiquetado</h2><p class="sub">Frases cortas con su clase. De aquí aprende la red.</p></div>
+    <div class="cols">
+      <div class="prose">
+        <p>Aprendizaje supervisado: cada frase trae su etiqueta correcta (<span class="c0"><b>positivo</b></span>, <span class="c1"><b>negativo</b></span> o <span class="c2"><b>neutral</b></span>). Durante el entrenamiento la red compara su predicción con esa etiqueta y corrige sus pesos.</p>
+        <p>Con tan pocas frases la red memoriza más de lo que generaliza. Esa es justo la lección: si una palabra nunca apareció en el dataset, la red no sabe qué significa. Agrega frases y observa cómo cambia la clasificación.</p>
+        <p class="note">La columna de la derecha muestra lo que predice el modelo actual para cada frase de entrenamiento (✓ acierta, ✗ falla).</p>
+      </div>
+      <div class="panel">
+        <div class="counts" id="counts"></div>
+        <div class="ds-list" id="dsList"></div>
+        <form id="addForm" class="form-grid" autocomplete="off">
+          <textarea id="newText" rows="1" placeholder="Escribe una frase nueva…" aria-label="Frase nueva"></textarea>
+          <select id="newLabel" aria-label="Etiqueta">
+            <option value="0">Positivo</option><option value="1">Negativo</option><option value="2">Neutral</option>
+          </select>
+          <button class="btn primary" type="submit">Agregar</button>
+        </form>
+        <div class="row" style="justify-content:space-between">
+          <span class="msg muted" id="addMsg"></span>
+          <button class="btn sm" id="resetData" type="button">Restaurar dataset original</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 TOKENS -->
+  <section class="step" id="tokens">
+    <div class="step-head"><div class="num">2</div><h2>De palabras a números</h2><p class="sub">Tokenización, vocabulario y embeddings.</p></div>
+    <div class="panel">
+      <label class="label" for="phrase">Frase que vas a clasificar</label>
+      <input type="text" id="phrase" autocomplete="off">
+      <div class="pipeline" aria-label="Preprocesamiento">
+        <span>minúsculas</span><em>→</em><span>quitar acentos y signos</span><em>→</em><span>separar por espacios</span><em>→</em><span>buscar índice en el vocabulario</span>
+      </div>
+      <div class="tokens" id="tokList"></div>
+      <p class="muted" id="tokInfo" style="font-size:14px"></p>
+    </div>
+    <div class="cols">
+      <div class="prose">
+        <p>La red no entiende letras: cada palabra se convierte en un <b>índice</b> del vocabulario (todas las palabras distintas del dataset). Quitamos acentos para que <i>está</i> y <i>esta</i> cuenten como la misma palabra.</p>
+        <p>Luego cada índice selecciona una fila de la matriz de embeddings <span class="lp">E</span>. Esa fila es el vector <b>x<sub>t</sub></b> que entra a la red en el paso <i>t</i>. Su longitud es <span class="hp">d, la dimensión del embedding</span>.</p>
+        <p>Las palabras que no están en el vocabulario se vuelven <span class="mono">&lt;UNK&gt;</span> y entran como un vector de ceros: la red solo arrastra su memoria en ese paso.</p>
+        <p>La alternativa más simple es <b>one-hot</b>: un vector de V posiciones con un solo 1 en el índice de la palabra. Es como usar una <span class="lp">E</span> igual a la matriz identidad, fija. Cada palabra queda igual de lejos de todas las demás, así que la red no puede aprovechar que <i>rica</i> y <i>sabrosa</i> se usan parecido. Cambia la <span class="hp">representación de palabras</span> en el paso 3 para verlo.</p>
+      </div>
+      <div class="panel">
+        <div class="label" id="embLabel">Embeddings x<sub>t</sub> de tu frase (una columna por palabra)</div>
+        <div class="scroll-x"><div id="embMat"></div></div>
+        <div class="scale"><span>negativo</span><span class="bar"></span><span>positivo</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 ARQUITECTURA -->
+  <section class="step" id="arq">
+    <div class="step-head"><div class="num">3</div><h2>La arquitectura y lo que se ajusta</h2><p class="sub">Cinco ecuaciones, seis bloques de parámetros aprendidos y siete perillas que mueves tú.</p></div>
+    <div class="cols">
+      <div class="panel">
+        <div class="label">Ecuaciones de una RNN simple (tipo Elman)</div>
+        <div class="eqs">
+          <div class="eq"><span class="n">(1)</span><span class="f">x<sub>t</sub> = <span class="lp">E</span>[ índice(palabra<sub>t</sub>) ]</span><span class="why">Buscar el vector de la palabra. Con one-hot, E es la identidad y no se aprende: x<sub>t</sub> tiene un 1 en la posición de la palabra.</span></div>
+          <div class="eq"><span class="n">(2)</span><span class="f">h<sub>t</sub> = tanh( <span class="lp">W_xh</span>·x<sub>t</sub> + <span class="lp">W_hh</span>·h<sub>t−1</sub> + <span class="lp">b_h</span> ),&nbsp; h<sub>0</sub> = 0</span><span class="why">El corazón recurrente: mezcla la palabra nueva con la memoria anterior. Los mismos pesos se reutilizan en todos los pasos.</span></div>
+          <div class="eq"><span class="n">(3)</span><span class="f">ŷ = softmax( <span class="lp">W_hy</span>·h<sub>T</sub> + <span class="lp">b_y</span> )</span><span class="why">Solo el último estado h<sub>T</sub> decide la clase.</span></div>
+          <div class="eq"><span class="n">(4)</span><span class="f">L = −log ŷ<sub>clase correcta</sub></span><span class="why">Entropía cruzada: castiga dar poca probabilidad a la etiqueta real.</span></div>
+          <div class="eq"><span class="n">(5)</span><span class="f">θ ← θ − <span class="hp">η</span> · recorte<sub><span class="hp">c</span></sub>(∇<sub>θ</sub>L)</span><span class="why">Descenso de gradiente con retropropagación en el tiempo (BPTT). θ son todos los parámetros aprendidos.</span></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="label">Parámetros que aprende la red (con tus hiperparámetros actuales)</div>
+        <div class="scroll-x"><table id="paramTable"></table></div>
+      </div>
+    </div>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between"><div class="label">Hiperparámetros · los ajustas tú antes de entrenar</div><span class="muted" style="font-size:13px">Al cambiar cualquiera hay que volver a entrenar (paso 4).</span></div>
+      <div class="hparams">
+        <div class="hpc"><div class="top"><span class="name">Representación de palabras</span><span class="val" id="v_rep"></span></div><div class="seg" id="hp_rep" role="group" aria-label="Representación de palabras"><button type="button" data-rep="emb">Embedding aprendido</button><button type="button" data-rep="onehot">One-hot</button></div><p>Embedding: d números por palabra que la red aprende. One-hot: V posiciones con un solo 1, fijo, no se aprende.</p></div>
+        <div class="hpc"><div class="top"><span class="name">Dimensión del embedding <span class="mono">d</span></span><span class="val" id="v_d"></span></div><input type="range" id="hp_d" min="2" max="16" step="1" aria-label="Dimensión del embedding"><p id="dNote">Cuántos números describen cada palabra. Más grande = más capacidad, más parámetros.</p></div>
+        <div class="hpc"><div class="top"><span class="name">Tamaño del estado oculto <span class="mono">H</span></span><span class="val" id="v_H"></span></div><input type="range" id="hp_H" min="2" max="24" step="1" aria-label="Tamaño del estado oculto"><p>Cuánta memoria tiene la red. Es el número de filas de h<sub>t</sub>.</p></div>
+        <div class="hpc"><div class="top"><span class="name">Tasa de aprendizaje <span class="mono">η</span></span><span class="val" id="v_lr"></span></div><input type="range" id="hp_lr" min="0" max="7" step="1" aria-label="Tasa de aprendizaje"><p>Tamaño de cada corrección. Muy alta: la pérdida oscila. Muy baja: aprende lento.</p></div>
+        <div class="hpc"><div class="top"><span class="name">Épocas</span><span class="val" id="v_ep"></span></div><input type="range" id="hp_ep" min="10" max="400" step="10" aria-label="Épocas"><p>Cuántas veces recorre el dataset completo durante el entrenamiento.</p></div>
+        <div class="hpc"><div class="top"><span class="name">Recorte de gradiente <span class="mono">c</span></span><span class="val" id="v_clip"></span></div><input type="range" id="hp_clip" min="0.5" max="10" step="0.5" aria-label="Recorte de gradiente"><p>Límite a la norma del gradiente. Evita la explosión de gradientes típica de las RNN.</p></div>
+        <div class="hpc"><div class="top"><span class="name">Semilla aleatoria</span><span class="val" id="v_seed"></span></div><input type="range" id="hp_seed" min="1" max="50" step="1" aria-label="Semilla aleatoria"><p>Fija los pesos iniciales y el orden de las frases. Cambiarla muestra cuánto depende el resultado del azar.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 4 ENTRENAMIENTO -->
+  <section class="step" id="entrena">
+    <div class="step-head"><div class="num">4</div><h2>Entrenamiento</h2><p class="sub">La red ajusta <span class="lp">E</span>, <span class="lp">W_xh</span>, <span class="lp">W_hh</span>, <span class="lp">b_h</span>, <span class="lp">W_hy</span> y <span class="lp">b_y</span> para bajar la pérdida.</p></div>
+    <div id="staleBox"></div>
+    <div class="panel">
+      <div class="row">
+        <button class="btn primary" id="trainBtn" type="button">Entrenar con estos hiperparámetros</button>
+        <button class="btn" id="untrainBtn" type="button">Ver la red sin entrenar</button>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div class="charts">
+        <div class="chart"><div class="label">Pérdida promedio por época</div><div id="lossChart"></div></div>
+        <div class="chart"><div class="label">Exactitud en el dataset de entrenamiento</div><div id="accChart"></div></div>
+      </div>
+      <p class="note">En cada época: se barajan las frases; para cada una se hace el paso hacia adelante (ecuaciones 1–3), se calcula la pérdida (4), el error se propaga hacia atrás por todos los pasos de la frase (BPTT) y se actualizan los pesos (5). Prueba subir <span class="hp">η</span> a 0.5 o bajar las <span class="hp">épocas</span> a 20 para ver qué pasa.</p>
+    </div>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between"><div class="label">Comparar representaciones · one-hot vs. embedding aprendido</div><button class="btn primary" id="cmpBtn" type="button">Comparar</button></div>
+      <p class="note">Entrena las dos variantes con los mismos hiperparámetros (<span class="hp">d</span>, <span class="hp">H</span>, <span class="hp">η</span>, <span class="hp">épocas</span>, <span class="hp">c</span>, <span class="hp">semilla</span>). Además hace validación cruzada <b>dejando una fuera</b>: entrena con todas las frases menos una, predice la que quedó fuera y repite con cada frase. Esa exactitud mide qué tan bien generaliza a frases que la red no vio, que es lo que de verdad importa.</p>
+      <div id="cmpOut"><p class="muted">Pulsa «Comparar». Tarda unos segundos porque entrena 2 × (número de frases + 1) redes.</p></div>
+    </div>
+  </section>
+
+  <!-- 5 LECTURA -->
+  <section class="step" id="lectura">
+    <div class="step-head"><div class="num">5</div><h2>La red lee la frase, palabra por palabra</h2><p class="sub">Avanza el tiempo <i>t</i> y mira cómo cambia la memoria h<sub>t</sub>.</p></div>
+    <div class="panel">
+      <div class="scroll-x"><div class="timeline" id="timeline"></div></div>
+      <div class="ctrl">
+        <button class="btn sm" id="prevBtn" type="button" aria-label="Paso anterior">◀ Anterior</button>
+        <button class="btn sm" id="playBtn" type="button">▶ Reproducir</button>
+        <button class="btn sm" id="nextBtn" type="button" aria-label="Paso siguiente">Siguiente ▶</button>
+        <input type="range" id="tSlider" min="1" max="1" step="1" aria-label="Paso de tiempo">
+      </div>
+      <div class="narr" id="narr"></div>
+      <p class="muted" style="font-size:13px">La barrita bajo cada palabra es la clase que daría la red <b>si la frase terminara ahí</b>: <span class="c0">■ positivo</span> <span class="c1">■ negativo</span> <span class="c2">■ neutral</span>.</p>
+    </div>
+    <div class="cols">
+      <div class="panel">
+        <div class="label">Cálculo del paso actual · ecuación (2)</div>
+        <div class="scroll-x"><div class="calc" id="calc"></div></div>
+        <div class="scale"><span>−1</span><span class="bar"></span><span>+1</span></div>
+      </div>
+      <div class="panel">
+        <div class="label">Memoria h<sub>t</sub> a lo largo de la frase (toca una columna)</div>
+        <div class="scroll-x"><div id="hmat"></div></div>
+        <p class="note">Cada fila es una neurona oculta; cada columna, el estado después de leer esa palabra. Las celdas que cambian de color cuando aparece una palabra son las neuronas que reaccionan a ella.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 SALIDA -->
+  <section class="step" id="salida">
+    <div class="step-head"><div class="num">6</div><h2>Clasificación final</h2><p class="sub">El último estado h<sub>T</sub> pasa por <span class="lp">W_hy</span>, <span class="lp">b_y</span> y softmax.</p></div>
+    <div class="cols">
+      <div class="panel">
+        <div class="label">Frase</div>
+        <p id="outPhrase" style="font-size:18px;font-weight:600"></p>
+        <div class="verdict" id="verdict"></div>
+        <div class="probs" id="probs"></div>
+        <div class="mono muted" id="logits" style="font-size:13px"></div>
+      </div>
+      <div class="panel">
+        <label class="label" for="phrase2">Prueba otra frase</label>
+        <input type="text" id="phrase2" autocomplete="off">
+        <div class="chips" id="chips"></div>
+        <div class="label" style="margin-top:6px">¿La red se equivocó? Agrega esta frase al dataset como</div>
+        <div class="row" id="addFromTest">
+          <button class="btn sm c0" data-y="0" type="button">Positivo</button>
+          <button class="btn sm c1" data-y="1" type="button">Negativo</button>
+          <button class="btn sm c2" data-y="2" type="button">Neutral</button>
+        </div>
+        <p class="msg muted" id="addMsg2"></p>
+        <p class="note">Tu frase de ejemplo mezcla dos opiniones: «fría está sabrosa» y «al tiempo no está tan mal». Como la RNN lee de izquierda a derecha y decide con el último estado, lo que viene después de <i>aunque</i> pesa mucho. Si te parece que la clase correcta es otra, agrégala con esa etiqueta, entrena de nuevo y compara.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>Material de divulgación · Dra. Nancy P.C. · RNN simple tipo Elman entrenada en el navegador con descenso de gradiente y BPTT; sin bibliotecas externas.</footer>
+</div>
+
+<script>
+(function(){
+"use strict";
+const DEFAULT_PHRASE = "El agua de jamaica fria esta sabrosa aunque al tiempo no está tan mal";
+const CLASSES = ["Positivo","Negativo","Neutral"];
+const LRS = [0.002,0.005,0.01,0.02,0.05,0.1,0.2,0.5];
+const SEED_DATA = [
+  ["el agua de jamaica está sabrosa",0],["la horchata fría está deliciosa",0],["me encanta el café de Xalapa",0],
+  ["los tamales están muy sabrosos",0],["el agua fría está muy rica",0],["qué rico está el pan dulce",0],
+  ["la comida de hoy está buenísima",0],["el café no está nada mal",0],["me gusta mucho el agua de jamaica fría",0],
+  ["el agua de jamaica está horrible",1],["el café está frío y feo",1],["la sopa sabe muy mal",1],
+  ["no me gusta el agua al tiempo",1],["el pan está duro y feo",1],["la horchata está aguada y sin sabor",1],
+  ["esta comida está horrible",1],["el agua al tiempo sabe mal",1],["no me gustan los tamales",1],
+  ["el agua de jamaica está en la mesa",2],["compré agua al tiempo",2],["la horchata es blanca",2],
+  ["el café se sirve en taza",2],["hoy tomé agua de jamaica",2],["el pan está en la bolsa",2],
+  ["el agua al tiempo es normal",2],["la sopa no está tan mal ni tan bien",2],["los tamales se venden en la esquina",2]
+].map(([text,y])=>({text,y,user:false}));
+const EXAMPLES = [DEFAULT_PHRASE,"el agua de jamaica está horrible","compré agua de jamaica fría","la horchata fría está deliciosa","el café al tiempo sabe mal","no está tan mal"];
+const KEY = "rnn-jamaica-dataset-v1";
+
+/* ---------- utilidades ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const zeros = n => new Array(n).fill(0);
+const mat = (r,c,f) => Array.from({length:r},()=>Array.from({length:c},f));
+const matVec = (M,v) => M.map(row=>{let s=0;for(let j=0;j<v.length;j++)s+=row[j]*v[j];return s});
+function softmax(z){const m=Math.max(...z);const e=z.map(x=>Math.exp(x-m));const s=e.reduce((a,b)=>a+b,0);return e.map(x=>x/s)}
+const argmax = a => a.reduce((bi,v,i)=>v>a[bi]?i:bi,0);
+const pct = v => (v*100).toFixed(1)+" %";
+const fmt = v => (v>=0?"":"−")+Math.abs(v).toFixed(2);
+function normalize(s){return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9\s]/g," ")}
+const tokenize = s => normalize(s).split(/\s+/).filter(Boolean);
+
+/* ---------- modelo ---------- */
+function buildVocab(ds){
+  const freq=new Map();
+  ds.forEach(e=>tokenize(e.text).forEach(w=>freq.set(w,(freq.get(w)||0)+1)));
+  const words=[...freq.keys()].sort((a,b)=>freq.get(b)-freq.get(a)||a.localeCompare(b,"es"));
+  return ["<UNK>",...words];
+}
+function initModel(vocab,hp){
+  const rng=mulberry32(hp.seed*9973+17);
+  const u=s=>()=>(rng()*2-1)*s;
+  const V=vocab.length,H=hp.H,onehot=hp.rep==="onehot";
+  const d=onehot?V:hp.d;
+  let E;
+  if(onehot){E=Array.from({length:V},(_,i)=>{const r=zeros(V);if(i>0)r[i]=1;return r});}
+  else{E=mat(V,d,u(0.5));E[0]=zeros(d);}
+  return {vocab,index:new Map(vocab.map((w,i)=>[w,i])),d,H,E,fixedE:onehot,
+    Wxh:mat(H,d,u(onehot?0.5:Math.sqrt(1/d))),Whh:mat(H,H,u(0.5*Math.sqrt(1/H))),bh:zeros(H),
+    Why:mat(3,H,u(Math.sqrt(1/H))),by:zeros(3)};
+}
+function paramRows(hp,V){
+  const H=hp.H,oh=hp.rep==="onehot",d=oh?V:hp.d;
+  return [["E",oh?"V × V":"V × d",`${V} × ${d}`,oh?0:V*d,oh?"One-hot: matriz identidad fija, no se aprende (0 parámetros)":"Embeddings: un vector por palabra"],
+    ["W_xh",oh?"H × V":"H × d",`${H} × ${d}`,H*d,"De la palabra al estado oculto"],
+    ["W_hh","H × H",`${H} × ${H}`,H*H,"De la memoria anterior al nuevo estado (la recurrencia)"],
+    ["b_h","H",`${H}`,H,"Sesgo del estado oculto"],
+    ["W_hy","3 × H",`3 × ${H}`,3*H,"Del último estado a las 3 clases"],
+    ["b_y","3","3",3,"Sesgo de salida"]];
+}
+const paramTotal=(hp,V)=>paramRows(hp,V).reduce((s,r)=>s+r[3],0);
+function encode(m,text){return tokenize(text).map(w=>({w,id:m.index.has(w)?m.index.get(w):0}))}
+function forward(m,ids,fast){
+  let h=zeros(m.H);const hs=[h],xs=[],as=[],xpart=[],hpart=[],step=[];
+  for(const id of ids){
+    const x=m.E[id];const px=m.fixedE?m.Wxh.map(r=>id?r[id]:0):matVec(m.Wxh,x);const ph=matVec(m.Whh,h);
+    const a=px.map((v,i)=>v+ph[i]+m.bh[i]);const hn=a.map(Math.tanh);
+    xs.push(x);xpart.push(px);hpart.push(ph);as.push(a);hs.push(hn);h=hn;
+    if(!fast)step.push(softmax(matVec(m.Why,hn).map((v,k)=>v+m.by[k])));
+  }
+  const logits=matVec(m.Why,h).map((v,k)=>v+m.by[k]);
+  return {hs,xs,as,xpart,hpart,step,logits,p:softmax(logits)};
+}
+function trainExample(m,ids,y,lr,clip){
+  const f=forward(m,ids,true);const T=ids.length,H=m.H,d=m.d;
+  const dl=f.p.slice();dl[y]-=1;const loss=-Math.log(Math.max(f.p[y],1e-12));
+  const hT=f.hs[T];const dWhy=dl.map(g=>hT.map(v=>g*v));const dby=dl.slice();
+  let dh=zeros(H);for(let i=0;i<H;i++)for(let k=0;k<3;k++)dh[i]+=m.Why[k][i]*dl[k];
+  const dWxh=m.fixedE?null:mat(H,d,()=>0),dCol=new Map(),dWhh=mat(H,H,()=>0),dbh=zeros(H),dE=new Map();
+  for(let t=T-1;t>=0;t--){
+    const h=f.hs[t+1],hp=f.hs[t],x=f.xs[t];
+    const da=dh.map((g,i)=>g*(1-h[i]*h[i]));
+    const id=ids[t];
+    if(m.fixedE&&id){const g=dCol.get(id)||zeros(H);for(let i=0;i<H;i++)g[i]+=da[i];dCol.set(id,g);}
+    for(let i=0;i<H;i++){
+      dbh[i]+=da[i];
+      if(!m.fixedE)for(let j=0;j<d;j++)dWxh[i][j]+=da[i]*x[j];
+      for(let j=0;j<H;j++)dWhh[i][j]+=da[i]*hp[j];
+    }
+    if(id!==0&&!m.fixedE){const g=dE.get(id)||zeros(d);for(let j=0;j<d;j++){let s=0;for(let i=0;i<H;i++)s+=m.Wxh[i][j]*da[i];g[j]+=s;}dE.set(id,g);}
+    const nd=zeros(H);for(let j=0;j<H;j++){let s=0;for(let i=0;i<H;i++)s+=m.Whh[i][j]*da[i];nd[j]=s;}dh=nd;
+  }
+  let sq=0;const acc=a=>{for(const v of a)sq+=v*v};
+  dWhy.forEach(acc);acc(dby);if(dWxh)dWxh.forEach(acc);dCol.forEach(acc);dWhh.forEach(acc);acc(dbh);dE.forEach(acc);
+  const norm=Math.sqrt(sq);const sc=norm>clip?clip/norm:1;const s=lr*sc;
+  const upd=(W,G)=>{for(let i=0;i<W.length;i++)for(let j=0;j<W[i].length;j++)W[i][j]-=s*G[i][j]};
+  upd(m.Why,dWhy);if(dWxh)upd(m.Wxh,dWxh);dCol.forEach((g,id)=>{for(let i=0;i<H;i++)m.Wxh[i][id]-=s*g[i]});upd(m.Whh,dWhh);
+  for(let k=0;k<3;k++)m.by[k]-=s*dby[k];for(let i=0;i<H;i++)m.bh[i]-=s*dbh[i];
+  dE.forEach((g,id)=>{for(let j=0;j<d;j++)m.E[id][j]-=s*g[j]});
+  return {loss,clipped:norm>clip};
+}
+function evaluate(m,ds){
+  let L=0,c=0;
+  ds.forEach(e=>{const f=forward(m,encode(m,e.text).map(t=>t.id),true);L+=-Math.log(Math.max(f.p[e.y],1e-12));if(argmax(f.p)===e.y)c++;});
+  return {loss:L/Math.max(1,ds.length),acc:c/Math.max(1,ds.length)};
+}
+
+/* ---------- estado ---------- */
+const state={data:loadData(),hp:{rep:"emb",d:8,H:12,lr:4,epochs:150,clip:5,seed:7},model:null,hist:[],trained:false,stale:false,training:false,phrase:DEFAULT_PHRASE,t:1,timer:null,cmp:null,cmpStale:false,cmpBusy:false};
+function loadData(){
+  try{const raw=localStorage.getItem(KEY);if(raw){const d=JSON.parse(raw);if(Array.isArray(d)&&d.length)return d.filter(e=>e&&typeof e.text==="string"&&[0,1,2].includes(e.y));}}catch(e){}
+  return SEED_DATA.map(e=>({...e}));
+}
+function saveData(){try{localStorage.setItem(KEY,JSON.stringify(state.data))}catch(e){}}
+
+/* ---------- entrenamiento ---------- */
+function makeTrainer(ds,hp){
+  const m=initModel(buildVocab(ds),hp);const rng=mulberry32(hp.seed*31+5);const lr=LRS[hp.lr];
+  const encs=ds.map(e=>({ids:encode(m,e.text).map(t=>t.id),y:e.y}));
+  return {m,epoch(){
+    const order=encs.map((_,i)=>i);
+    for(let i=order.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[order[i],order[j]]=[order[j],order[i]]}
+    let clipped=0;
+    for(const i of order){if(trainExample(m,encs[i].ids,encs[i].y,lr,hp.clip).clipped)clipped++;}
+    return clipped;
+  }};
+}
+function train(animated){
+  if(state.training)return;
+  stopPlay();
+  const hp={...state.hp};const ds=state.data;
+  const tr=makeTrainer(ds,hp);
+  state.model=tr.m;state.hist=[];state.stale=false;state.trained=true;let ep=0;
+  function epoch(){
+    const clipped=tr.epoch();
+    const ev=evaluate(state.model,ds);
+    state.hist.push({loss:ev.loss,acc:ev.acc,clipped});ep++;
+  }
+  if(!animated){while(ep<hp.epochs)epoch();renderAll();return;}
+  state.training=true;renderTraining();
+  const per=Math.max(1,Math.ceil(hp.epochs/80));
+  (function frame(){
+    for(let k=0;k<per&&ep<hp.epochs;k++)epoch();
+    renderTraining();
+    if(ep<hp.epochs)requestAnimationFrame(frame);
+    else{state.training=false;renderAll();}
+  })();
+}
+function untrained(){
+  if(state.training)return;
+  state.model=initModel(buildVocab(state.data),state.hp);
+  state.hist=[];state.trained=false;state.stale=false;
+  renderAll();
+}
+function markStale(){state.stale=true;if(state.cmp)state.cmpStale=true;renderStale();renderArch();if(!state.cmpBusy)renderCmp();}
+
+/* ---------- comparación one-hot vs embedding ---------- */
+function compare(){
+  if(state.cmpBusy||state.training)return;
+  const base={...state.hp};const ds=state.data.slice();const phrase=state.phrase;
+  const reps=["onehot","emb"];const res={};const jobs=[];
+  reps.forEach(rep=>{res[rep]={hits:0,n:0,curve:[]};jobs.push({rep,kind:"full"});ds.forEach((_,i)=>jobs.push({rep,kind:"loo",i}));});
+  state.cmpBusy=true;$("cmpBtn").disabled=true;$("cmpBtn").textContent="Comparando…";
+  let j=0;
+  function next(){
+    const t0=performance.now();
+    while(j<jobs.length&&performance.now()-t0<40){
+      const job=jobs[j++];const hp={...base,rep:job.rep};const r=res[job.rep];
+      if(job.kind==="full"){
+        const tr=makeTrainer(ds,hp);
+        for(let e=0;e<hp.epochs;e++){tr.epoch();r.curve.push(evaluate(tr.m,ds).loss);}
+        const ev=evaluate(tr.m,ds);r.loss=ev.loss;r.acc=ev.acc;r.params=paramTotal(hp,tr.m.vocab.length);r.V=tr.m.vocab.length;
+        const enc=encode(tr.m,phrase);const f=forward(tr.m,enc.map(t=>t.id));r.pred=argmax(f.p);r.conf=f.p[r.pred];
+      }else{
+        const tr=makeTrainer(ds.filter((_,k)=>k!==job.i),hp);
+        for(let e=0;e<hp.epochs;e++)tr.epoch();
+        const f=forward(tr.m,encode(tr.m,ds[job.i].text).map(t=>t.id));r.n++;if(argmax(f.p)===ds[job.i].y)r.hits++;
+      }
+    }
+    $("cmpOut").innerHTML=`<p class="muted">Entrenando… ${Math.round(j/jobs.length*100)} % de ${jobs.length} redes</p>`;
+    if(j<jobs.length)setTimeout(next,0);
+    else{state.cmp={res,hp:base,phrase,n:ds.length};state.cmpStale=false;state.cmpBusy=false;$("cmpBtn").disabled=false;$("cmpBtn").textContent="Comparar de nuevo";renderCmp();}
+  }
+  setTimeout(next,0);
+}
+function renderCmp(){
+  const c=state.cmp;if(!c)return;
+  const o=c.res.onehot,e=c.res.emb;
+  const loo=r=>r.hits/Math.max(1,r.n);
+  const w=(a,b,hi)=>a===b?["",""]:((hi?a>b:a<b)?["win",""]:["","win"]);
+  const row=(name,a,b,fa,fb,cls)=>`<tr><td>${name}</td><td class="r ${cls[0]}">${fa}</td><td class="r ${cls[1]}">${fb}</td></tr>`;
+  const lo=loo(o),le=loo(e);
+  let verdict;
+  if(Math.abs(lo-le)<1e-9)verdict=`Con este dataset ambas generalizan igual (${Math.round(lo*100)} % en frases no vistas).`;
+  else{const best=le>lo?"el embedding aprendido":"one-hot";verdict=`En frases no vistas, <b>${best}</b> acierta más: ${Math.round(Math.max(lo,le)*100)} % contra ${Math.round(Math.min(lo,le)*100)} %.`;}
+  const chart=lineChart([{vals:o.curve,color:"var(--teal)"},{vals:e.curve,color:"var(--accent)"}],Math.ceil(Math.max(1.2,...o.curve,...e.curve)*2)/2,v=>v.toFixed(2),c.hp.epochs);
+  $("cmpOut").innerHTML=(state.cmpStale?`<div class="stale"><span>Estos resultados son de la configuración anterior. Cambiaste el dataset o los hiperparámetros.</span></div>`:"")+
+  `<div class="cols"><div class="scroll-x"><table class="cmp"><thead><tr><th></th><th class="r"><span class="swatch" style="background:var(--teal)"></span>One-hot</th><th class="r"><span class="swatch" style="background:var(--accent)"></span>Embedding (d = ${c.hp.d})</th></tr></thead><tbody>`+
+  row("Tamaño de x<sub>t</sub>",0,0,`V = ${o.V}`,`d = ${c.hp.d}`,["",""])+
+  row("Parámetros aprendidos",o.params,e.params,o.params.toLocaleString("es-MX"),e.params.toLocaleString("es-MX"),["",""])+
+  row("Pérdida final (entrenamiento)",o.loss,e.loss,o.loss.toFixed(3),e.loss.toFixed(3),w(o.loss,e.loss,false))+
+  row("Exactitud en entrenamiento",o.acc,e.acc,Math.round(o.acc*100)+" %",Math.round(e.acc*100)+" %",w(o.acc,e.acc,true))+
+  row("<b>Exactitud dejando una fuera</b><div class='muted' style='font-size:12.5px'>frases que la red no vio</div>",lo,le,`${o.hits} / ${o.n} · ${Math.round(lo*100)} %`,`${e.hits} / ${e.n} · ${Math.round(le*100)} %`,w(lo,le,true))+
+  row(`Predicción para «${esc(c.phrase.length>40?c.phrase.slice(0,38)+"…":c.phrase)}»`,0,0,`<span class="c${o.pred}">${CLASSES[o.pred]}</span> ${pct(o.conf)}`,`<span class="c${e.pred}">${CLASSES[e.pred]}</span> ${pct(e.conf)}`,["",""])+
+  `</tbody></table></div><div class="chart"><div class="label">Pérdida por época en entrenamiento</div>${chart}</div></div>`+
+  `<p style="margin-top:10px">${verdict} Las dos llegan a ajustar bien el dataset de entrenamiento; la diferencia real aparece en las frases nuevas. Con ${c.n} frases el resultado depende mucho del azar: cambia la <span class="hp">semilla</span> o la <span class="hp">d</span> y compara de nuevo.</p>`;
+}
+
+/* ---------- render: celdas ---------- */
+function heatCell(v,scale,cls,extra){
+  const a=Math.min(1,Math.abs(v)/(scale||1));
+  const c=v>=0?"var(--accent)":"var(--teal)";
+  const bg=`color-mix(in oklab, ${c} ${Math.round(a*88)}%, var(--cell0))`;
+  const fg=a>0.55?"var(--on-strong)":"var(--ink)";
+  return `<span class="cell ${cls||""}" style="background:${bg};color:${fg}" title="${fmt(v)}" ${extra||""}>${cls&&cls.includes("sm")?"":fmt(v)}</span>`;
+}
+function column(vec,scale){return `<div class="heat">${vec.map(v=>heatCell(v,scale)).join("")}</div>`}
+
+/* ---------- render: dataset ---------- */
+function renderData(){
+  const m=state.model;
+  const n=[0,0,0];state.data.forEach(e=>n[e.y]++);
+  $("counts").innerHTML=CLASSES.map((c,i)=>`<span class="badge c${i}">${c}: ${n[i]}</span>`).join("")+`<span class="muted" style="font-size:13px;align-self:center">${state.data.length} frases</span>`;
+  $("dsList").innerHTML=state.data.map((e,i)=>{
+    let pred="";
+    if(m){const p=forward(m,encode(m,e.text).map(t=>t.id)).p;const k=argmax(p);pred=k===e.y?`<span class="pred ok" title="Predice ${CLASSES[k]}">✓ ${CLASSES[k].slice(0,3)}</span>`:`<span class="pred bad" title="Predice ${CLASSES[k]}">✗ ${CLASSES[k].slice(0,3)}</span>`;}
+    return `<div class="ds-item"><span class="badge c${e.y}">${CLASSES[e.y]}</span><span class="txt">${esc(e.text)}${e.user?'<span class="new-tag">tuya</span>':""}</span>${pred}<button class="xbtn" data-del="${i}" aria-label="Eliminar frase" title="Eliminar">×</button></div>`;
+  }).join("");
+}
+function addPhrase(text,y,msgEl){
+  text=text.trim().replace(/\s+/g," ");
+  if(!tokenize(text).length){msgEl.textContent="Escribe una frase con al menos una palabra.";return false;}
+  if(state.data.some(e=>normalize(e.text).trim()===normalize(text).trim())){msgEl.textContent="Esa frase ya está en el dataset.";return false;}
+  state.data.push({text,y,user:true});saveData();
+  msgEl.innerHTML=`Agregada como <b class="c${y}">${CLASSES[y]}</b>. Entrena de nuevo para que la red la aprenda.`;
+  markStale();renderData();return true;
+}
+
+/* ---------- render: tokens ---------- */
+function renderHero(){
+  const toks=tokenize(DEFAULT_PHRASE);
+  $("heroPhrase").innerHTML=DEFAULT_PHRASE.split(/\s+/).map((w,i)=>`<span>${esc(w)}</span>${i<toks.length-1?"<i>→</i>":""}`).join("");
+}
+function renderTokens(){
+  const m=state.model;const enc=encode(m,state.phrase);
+  $("tokList").innerHTML=enc.length?enc.map((t,i)=>`<div class="tok ${t.id===0?"unk":""}"><span class="w">${esc(t.w)}</span><span class="id">${t.id===0?"&lt;UNK&gt; · 0":"índice "+t.id}</span></div>`).join(""):'<span class="muted">Escribe una frase para verla tokenizada.</span>';
+  const unk=enc.filter(t=>t.id===0).map(t=>"«"+esc(t.w)+"»");
+  $("tokInfo").innerHTML=`${enc.length} tokens · vocabulario del modelo: V = ${m.vocab.length} palabras (incluye &lt;UNK&gt;)`+(unk.length?` · desconocidas: ${unk.join(", ")}`:" · todas las palabras están en el vocabulario");
+  if(m.fixedE){
+    $("tokInfo").innerHTML+=` · representación one-hot: cada x<sub>t</sub> tiene V = ${m.vocab.length} números, todos 0 excepto uno`;
+    $("embLabel").innerHTML=`Vectores one-hot x<sub>t</sub> de tu frase. Solo se muestran las filas de sus palabras; las otras ${m.vocab.length} posiciones son 0`;
+  }else $("embLabel").innerHTML=`Embeddings x<sub>t</sub> de tu frase (una columna por palabra, d = ${m.d} filas)`;
+  if(!enc.length){$("embMat").innerHTML="";return;}
+  let html=`<div class="hmat" style="grid-template-columns:auto repeat(${enc.length},30px)"><span></span>`;
+  enc.forEach(t=>html+=`<span class="cl" title="${esc(t.w)}">${esc(t.w)}</span>`);
+  if(m.fixedE){
+    const ids=[...new Set(enc.map(t=>t.id).filter(i=>i>0))];
+    if(!ids.length){$("embMat").innerHTML='<p class="muted">Ninguna palabra está en el vocabulario: todos los x<sub>t</sub> son ceros.</p>';return;}
+    ids.forEach(id=>{html+=`<span class="rl">#${id} ${esc(m.vocab[id])}</span>`;enc.forEach(t=>html+=heatCell(t.id===id?1:0,1,"sm"));});
+  }else{
+    for(let j=0;j<m.d;j++){html+=`<span class="rl">x${j+1}</span>`;enc.forEach(t=>html+=heatCell(m.E[t.id][j],1,"sm"));}
+  }
+  $("embMat").innerHTML=html+"</div>";
+}
+
+/* ---------- render: arquitectura ---------- */
+function renderArch(){
+  const hp=state.hp;const V=buildVocab(state.data).length;
+  const rows=paramRows(hp,V);
+  const tot=rows.reduce((s,r)=>s+r[3],0);
+  const oh=hp.rep==="onehot";
+  $("v_rep").textContent=oh?"one-hot":"embedding";
+  $("hp_rep").querySelectorAll("[data-rep]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.rep===hp.rep)));
+  $("hp_d").disabled=oh;
+  $("dNote").textContent=oh?`Con one-hot no se usa: el tamaño de x_t es V = ${V}, el número de palabras del vocabulario.`:"Cuántos números describen cada palabra. Más grande = más capacidad, más parámetros.";
+  $("paramTable").innerHTML=`<thead><tr><th>Parámetro</th><th>Forma</th><th>Tamaño</th><th class="r">Números</th></tr></thead><tbody>`+
+    rows.map(r=>`<tr><td><span class="lp">${r[0]}</span><div class="muted" style="font-size:12.5px">${r[4]}</div></td><td class="mono">${r[1]}</td><td class="mono">${r[2]}</td><td class="r">${r[3].toLocaleString("es-MX")}</td></tr>`).join("")+
+    `</tbody><tfoot><tr><td colspan="3">Total de parámetros aprendidos</td><td class="r">${tot.toLocaleString("es-MX")}</td></tr></tfoot>`;
+  $("v_d").textContent=oh?"= V":hp.d;$("v_H").textContent=hp.H;$("v_lr").textContent=LRS[hp.lr];
+  $("v_ep").textContent=hp.epochs;$("v_clip").textContent=hp.clip;$("v_seed").textContent=hp.seed;
+}
+
+/* ---------- render: entrenamiento ---------- */
+function renderStale(){
+  const box=$("staleBox");
+  if(state.stale&&!state.training){
+    box.innerHTML=`<div class="stale"><span>Cambiaste el dataset o los hiperparámetros. El modelo que ves abajo todavía es el anterior.</span><button class="btn primary sm" type="button" id="staleTrain">Entrenar ahora</button></div>`;
+    $("staleTrain").onclick=()=>{train(!reduceMotion());};
+  }else box.innerHTML="";
+}
+function lineChart(series,maxY,fmtY,epochs){
+  const W=320,Hh=150,L=40,R=10,T=10,B=24;const iw=W-L-R,ih=Hh-T-B;
+  const n=Math.max(1,epochs-1);
+  const X=i=>L+iw*(i/n),Y=v=>T+ih*(1-v/maxY);
+  let g="";
+  [0,0.5,1].forEach(f=>{const v=maxY*f;g+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" style="stroke:var(--line)" stroke-width="1"/><text x="${L-6}" y="${Y(v)+4}" text-anchor="end" font-size="10" style="fill:var(--muted);font-family:var(--mono)">${fmtY(v)}</text>`;});
+  g+=`<text x="${L}" y="${Hh-6}" font-size="10" style="fill:var(--muted);font-family:var(--mono)">1</text><text x="${W-R}" y="${Hh-6}" text-anchor="end" font-size="10" style="fill:var(--muted);font-family:var(--mono)">época ${epochs}</text>`;
+  const fillArea=series.length===1;
+  if(series.some(s=>s.vals.length)){
+    series.forEach(({vals,color})=>{
+      if(!vals.length)return;
+      const pts=vals.map((v,i)=>`${X(i).toFixed(1)},${Y(Math.min(v,maxY)).toFixed(1)}`).join(" ");
+      const last=vals.length-1;
+      if(fillArea)g+=`<polyline points="${L},${Y(0)} ${pts} ${X(last).toFixed(1)},${Y(0)}" style="fill:${color};opacity:.12;stroke:none"/>`;
+      g+=`<polyline points="${pts}" style="fill:none;stroke:${color}" stroke-width="2" stroke-linejoin="round"/>`;
+      g+=`<circle cx="${X(last)}" cy="${Y(Math.min(vals[last],maxY))}" r="3.5" style="fill:${color}"/>`;
+    });
+  }else g+=`<text x="${L+iw/2}" y="${T+ih/2}" text-anchor="middle" font-size="12" style="fill:var(--muted)">Sin entrenar todavía</text>`;
+  return `<svg viewBox="0 0 ${W} ${Hh}" role="img" aria-label="gráfica">${g}</svg>`;
+}
+function renderTraining(){
+  const h=state.hist,ep=state.training||h.length?state.hp.epochs:state.hp.epochs;
+  const losses=h.map(x=>x.loss),accs=h.map(x=>x.acc);
+  const maxL=Math.max(1.2,...losses.slice(0,1).concat(losses))*1.05;
+  const niceMax=Math.ceil(maxL*2)/2;
+  $("lossChart").innerHTML=lineChart([{vals:losses,color:"var(--accent)"}],niceMax,v=>v.toFixed(2),ep);
+  $("accChart").innerHTML=lineChart([{vals:accs,color:"var(--teal)"}],1,v=>Math.round(v*100)+"%",ep);
+  const last=h[h.length-1];
+  const ev=!last&&state.model?evaluate(state.model,state.data):null;
+  $("kpis").innerHTML=last?
+    `<div class="kpi"><div class="v">${h.length} / ${state.hp.epochs}</div><div class="k">épocas</div></div>
+     <div class="kpi"><div class="v">${last.loss.toFixed(3)}</div><div class="k">pérdida (entropía cruzada)</div></div>
+     <div class="kpi"><div class="v">${Math.round(last.acc*100)} %</div><div class="k">exactitud en entrenamiento</div></div>
+     <div class="kpi"><div class="v">${last.clipped}</div><div class="k">gradientes recortados en la última época</div></div>`:
+    `<div class="kpi"><div class="v">0</div><div class="k">épocas · pesos aleatorios</div></div>
+     <div class="kpi"><div class="v">${ev?ev.loss.toFixed(3):"—"}</div><div class="k">pérdida sin entrenar (≈ log 3 = 1.099)</div></div>
+     <div class="kpi"><div class="v">${ev?Math.round(ev.acc*100)+" %":"—"}</div><div class="k">exactitud sin entrenar</div></div>`;
+  $("trainBtn").disabled=state.training;$("untrainBtn").disabled=state.training;
+  $("trainBtn").textContent=state.training?"Entrenando…":"Entrenar con estos hiperparámetros";
+  renderStale();
+}
+
+/* ---------- render: lectura ---------- */
+let cache=null;
+function compute(){const m=state.model;const enc=encode(m,state.phrase);cache={enc,f:forward(m,enc.map(t=>t.id))};}
+function miniBar(p){return `<div class="mini">${p.map((v,k)=>`<span class="bg${k}" style="width:${(v*100).toFixed(1)}%"></span>`).join("")}</div>`}
+function renderWalk(){
+  const {enc,f}=cache;const T=enc.length;
+  if(!T){$("timeline").innerHTML='<span class="muted">Escribe una frase en el paso 2.</span>';$("calc").innerHTML="";$("hmat").innerHTML="";$("narr").textContent="";return;}
+  state.t=Math.min(Math.max(1,state.t),T);const t=state.t;
+  const sl=$("tSlider");sl.max=T;sl.value=t;
+  $("timeline").innerHTML=enc.map((tk,i)=>{
+    const cls=i+1===t?"on":(i+1>t?"future":"");
+    return (i?`<span class="arrow">h<sub>${i}</sub><br>→</span>`:"")+
+      `<button type="button" class="tstep ${cls}" data-t="${i+1}"><span class="t">t = ${i+1}</span><span class="w">${esc(tk.w)}</span>${miniBar(f.step[i])}</button>`;
+  }).join("");
+  const tk=enc[t-1],p=f.step[t-1],k=argmax(p);
+  let change="";
+  if(t>1){const k0=argmax(f.step[t-2]);if(k0!==k)change=` Al leer esta palabra la decisión cambió de <b class="c${k0}">${CLASSES[k0]}</b> a <b class="c${k}">${CLASSES[k]}</b>.`;}
+  $("narr").innerHTML=`<b>Paso ${t} de ${T}</b> · palabra «${esc(tk.w)}»${tk.id===0?' <span style="color:var(--accent)">(desconocida: x<sub>t</sub> = 0)</span>':""}. Si la frase terminara aquí, la red diría <b class="c${k}">${CLASSES[k]}</b> (${pct(p[k])}).${change}${t===T?" Este es el último paso: h<sub>T</sub> es lo que usa el clasificador.":""}`;
+  const i=t-1;
+  const colH=(label,vec,scale)=>`<div class="col"><div class="h">${label}</div>${column(vec,scale)}</div>`;
+  $("calc").innerHTML=
+    colH(`h<sub>${t-1}</sub><br>memoria`,f.hs[i],1)+`<span class="op">,</span>`+
+    (state.model.fixedE
+      ?`<div class="col"><div class="h">x<sub>${t}</sub><br>«${esc(tk.w)}»</div><div class="ohbox">one-hot<br>V = ${state.model.vocab.length}<br>${tk.id?`<b>1</b> en pos. ${tk.id}<br>resto 0`:"todo 0<br>(&lt;UNK&gt;)"}</div></div>`
+      :colH(`x<sub>${t}</sub><br>«${esc(tk.w)}»`,f.xs[i],1))+`<span class="op">⇒</span>`+
+    colH(`<span><span class="lp">W_xh</span>·x<sub>${t}</sub>${state.model.fixedE?(tk.id?`<br>= columna ${tk.id}`:"<br>= 0"):""}</span>`,f.xpart[i],1)+`<span class="op">+</span>`+
+    colH(`<span><span class="lp">W_hh</span>·h<sub>${t-1}</sub></span>`,f.hpart[i],1)+`<span class="op">+</span>`+
+    colH(`<span class="lp">b_h</span>`,state.model.bh,1)+`<span class="op">=</span>`+
+    colH(`a<sub>${t}</sub>`,f.as[i],1)+`<span class="op">tanh→</span>`+
+    colH(`<b>h<sub>${t}</sub></b>`,f.hs[t],1);
+  const H=state.model.H;
+  let html=`<div class="hmat" style="grid-template-columns:auto repeat(${T},30px)"><span></span>`;
+  enc.forEach((e,j)=>html+=`<span class="cl ${j+1===t?"on":""}" data-t="${j+1}" title="${esc(e.w)}">${esc(e.w)}</span>`);
+  for(let r=0;r<H;r++){html+=`<span class="rl">h${r+1}</span>`;for(let j=0;j<T;j++)html+=heatCell(f.hs[j+1][r],1,"sm"+(j+1===t?" on":""),`data-t="${j+1}"`);}
+  $("hmat").innerHTML=html+"</div>";
+}
+function setT(t){state.t=t;renderWalk();}
+function stopPlay(){if(state.timer){clearInterval(state.timer);state.timer=null;$("playBtn").textContent="▶ Reproducir";}}
+function play(){
+  if(state.timer){stopPlay();return;}
+  const T=cache.enc.length;if(!T)return;
+  state.t=1;renderWalk();$("playBtn").textContent="❚❚ Pausa";
+  state.timer=setInterval(()=>{if(state.t>=T){stopPlay();return;}setT(state.t+1);},reduceMotion()?400:900);
+}
+
+/* ---------- render: salida ---------- */
+function renderOut(){
+  const {enc,f}=cache;
+  $("outPhrase").textContent=state.phrase.trim()?"«"+state.phrase.trim()+"»":"(frase vacía)";
+  const k=argmax(f.p);
+  $("verdict").innerHTML=enc.length?`Clase predicha: <span class="c${k}">${CLASSES[k]}</span>`:"Escribe una frase";
+  $("probs").innerHTML=CLASSES.map((c,i)=>`<div class="prob"><span class="c${i}" style="font-weight:700">${c}</span><div class="track"><div class="fill bg${i}" style="width:${(f.p[i]*100).toFixed(1)}%"></div></div><span class="pct">${pct(f.p[i])}</span></div>`).join("");
+  $("logits").innerHTML=`logits z = <span class="lp">W_hy</span>·h<sub>T</sub> + <span class="lp">b_y</span> = [ ${f.logits.map(fmt).join(" , ")} ] → softmax`+(state.trained?"":" · <b>red sin entrenar</b>");
+}
+function renderChips(){$("chips").innerHTML=EXAMPLES.map(s=>`<button type="button" class="chip" data-p="${esc(s)}">${esc(s.length>38?s.slice(0,36)+"…":s)}</button>`).join("");}
+
+function renderPhraseDeps(){compute();renderTokens();renderWalk();renderOut();}
+function renderAll(){renderArch();renderTraining();renderData();compute();state.t=cache.enc.length||1;renderTokens();renderWalk();renderOut();}
+function reduceMotion(){try{return matchMedia("(prefers-reduced-motion: reduce)").matches}catch(e){return false}}
+
+/* ---------- eventos ---------- */
+function setPhrase(s,src){
+  state.phrase=s;stopPlay();
+  if(src!=="p1")$("phrase").value=s;
+  if(src!=="p2")$("phrase2").value=s;
+  compute();state.t=cache.enc.length||1;renderTokens();renderWalk();renderOut();
+}
+$("phrase").addEventListener("input",e=>setPhrase(e.target.value,"p1"));
+$("phrase2").addEventListener("input",e=>setPhrase(e.target.value,"p2"));
+$("chips").addEventListener("click",e=>{const b=e.target.closest("[data-p]");if(b)setPhrase(b.dataset.p);});
+$("addForm").addEventListener("submit",e=>{e.preventDefault();if(addPhrase($("newText").value,+$("newLabel").value,$("addMsg")))$("newText").value="";});
+$("newText").addEventListener("keydown",e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();$("addForm").requestSubmit();}});
+$("dsList").addEventListener("click",e=>{const b=e.target.closest("[data-del]");if(!b)return;state.data.splice(+b.dataset.del,1);saveData();$("addMsg").textContent="Frase eliminada. Entrena de nuevo para actualizar el modelo.";markStale();renderData();});
+$("resetData").addEventListener("click",()=>{state.data=SEED_DATA.map(e=>({...e}));saveData();$("addMsg").textContent="Dataset original restaurado.";markStale();renderData();});
+$("addFromTest").addEventListener("click",e=>{const b=e.target.closest("[data-y]");if(b)addPhrase(state.phrase,+b.dataset.y,$("addMsg2"));});
+$("trainBtn").addEventListener("click",()=>train(!reduceMotion()));
+$("untrainBtn").addEventListener("click",untrained);
+$("timeline").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(b){stopPlay();setT(+b.dataset.t);}});
+$("hmat").addEventListener("click",e=>{const b=e.target.closest("[data-t]");if(b){stopPlay();setT(+b.dataset.t);}});
+$("tSlider").addEventListener("input",e=>{stopPlay();setT(+e.target.value);});
+$("prevBtn").addEventListener("click",()=>{stopPlay();setT(Math.max(1,state.t-1));});
+$("nextBtn").addEventListener("click",()=>{stopPlay();setT(Math.min(cache.enc.length,state.t+1));});
+$("playBtn").addEventListener("click",play);
+$("cmpBtn").addEventListener("click",compare);
+$("hp_rep").addEventListener("click",e=>{const b=e.target.closest("[data-rep]");if(!b||b.dataset.rep===state.hp.rep)return;state.hp.rep=b.dataset.rep;markStale();});
+[["hp_d","d",parseInt],["hp_H","H",parseInt],["hp_lr","lr",parseInt],["hp_ep","epochs",parseInt],["hp_clip","clip",parseFloat],["hp_seed","seed",parseInt]].forEach(([id,key,parse])=>{
+  const el=$(id);el.value=state.hp[key];
+  el.addEventListener("input",()=>{state.hp[key]=parse(el.value);markStale();});
+});
+
+/* ---------- arranque: entrena una vez para abrir con un modelo listo ---------- */
+renderHero();renderChips();
+$("phrase").value=state.phrase;$("phrase2").value=state.phrase;
+train(false);
+})();
+</script>
+
+</body>
+</html>
